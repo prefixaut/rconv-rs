@@ -1,0 +1,89 @@
+#TITLE:ゾンビー・サーカス;
+#SUBTITLE:客招く誘蛾灯 テントに灯る;
+#ARTIST:かめりあ;
+#TITLETRANSLIT:No idea;
+#SUBTITLETRANSLIT:Idk,I just copied it from Tr.20;
+#ARTISTTRANSLIT:Camellia;
+#GENRE:Deathmetal;
+#CREDIT:PreFiXAUT;
+#BANNER:bn-sample.png;
+#BACKGROUND:bg-sample.jpg;
+#LYRICSPATH:rainbow.lyc;
+#CDTITLE:cdtitle-sample.png;
+#MUSIC:audio-file.ogg;
+#INSTRUMENTTRACKS:guitar=guitar.ogg,
+drums=drumdum.mp3;
+#SAMPLESTART:23.654;
+#SAMPLELENGTH:62.195;
+#DISPLAYBPM:120-666;
+#SELECTABLE:YES;
+#BGCHANGES:0.000=something.jpg=1.000=1=0=1=bloom=otherScript.lua=CrossFade=0.5^0.2^0.9^1.0=0.3^0.2^0.6^0.8
+,420.000=ayo.png=2.000=0=1=1=====;
+#BGCHANGES2:69.333=image.gif=3.500=1=0=0=invert=label.png;
+#BGCHANGES3:420.000=ayo.png=2.000=0=1=1=====,
+0.000=something.jpg=1.000=1=0=1=bloom=otherScript.lua=CrossFade=0.5^0.2^0.9^1.0=0.3^0.2^0.6^0.8
+,69.333=image.gif=3.500=1=0=0=invert=label.png;
+#ANIMATIONS:0.000=something.jpg=1.000=1=0=1=bloom=otherScript.lua=CrossFade=0.5^0.2^0.9^1.0=0.3^0.2^0.6^0.8;
+#FGCHANGES:69.333=image.gif=3.500=1=0=0=invert=label.png,
+0.000=something.jpg=1.000=1=0=1=bloom=otherScript.lua=CrossFade=0.5^0.2^0.9^1.0=0.3^0.2^0.6^0.8;
+#KEYSOUNDS:pf_24_c#+.ogg,ba_op1.ogg,dr_hho.ogg,dr_rs.ogg,dr_bd8.ogg,dr_cs8.ogg,sq_a.ogg,pc_c.ogg,pf_op11.ogg;
+#OFFSET:-0.246;
+#STOPS:46.250000=0.030000,
+46.500000=0.030000,
+46.750000=0.030000;
+#BPMS:0.000=210.000
+,5.000=230.000
+,40.333=120.500
+,90.000=90.750
+;
+#TIMESIGNATURES:3.500=8=5,5.100=3=4,8.900=8=10;
+#ATTACKS:
+    TIME=26.879999:LEN=209715.000000:MODS=*4 500 bumpy,*8 -50 bumpyperiod:
+    TIME=28.320000:LEN=5.000000:MODS=*8 no bumpy:
+    TIME=0.000000:LEN=209715.000000:MODS=*-1 skew:
+    TIME=0.000000:LEN=209715.000000:MODS=*-1 p2 10000 centered:
+    TIME=0.000000:LEN=209715.000000:MODS=*-1 p1 no dark;
+#DELAYS:65.134=4.262,84.001=43.232
+,930.32=12.000;
+#TICKCOUNTS:45.23=12,84.999=24;
+#NOTES:
+    dance-single:
+    cool-dood:
+    Challenge:
+    20:
+    0.2,0.3,0.5,0.7,0.9:
+0000
+0000
+0000
+0000
+,
+0000
+0000
+0000
+0000
+,
+2011
+0011
+0400
+0011
+0010
+0000
+0011
+0000
+,
+0000
+3011
+0011
+M0FF
+1011
+0311
+0000
+1011
+;
+#COMBOS:33.333=3=100,
+50.5=10=2,52=2=1;
+#SPEEDS:12.000=10=20=1,76.666=7.5=12=0;
+#SCROLLS:75.123=6.75;
+#FAKES:44.542=61,89.028=13.999;
+#LABELS:71.987=hello world
+,91.565=goodbye;

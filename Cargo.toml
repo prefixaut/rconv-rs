@@ -1,0 +1,16 @@
+[package]
+name = "rconv"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "rconv"
+path = "src/lib.rs"
+crate-type = ["rlib", "dylib"]
+
+[[bin]]
+name = "rconv"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0.86"
