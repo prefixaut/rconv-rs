@@ -19,6 +19,17 @@ pub struct StepmaniaColor {
     pub alpha: u8,
 }
 
+impl StepmaniaColor {
+    fn default() -> Self {
+        StepmaniaColor {
+            red: 0,
+            green: 0,
+            blue: 0,
+            alpha: 255,
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct StepmaniaVisualChange {
     /// Beat of the change in ms
@@ -42,7 +53,7 @@ pub struct StepmaniaVisualChange {
 }
 
 #[derive(Debug, Default)]
-pub struct StepmaniaStop {
+pub struct StepmaniaTimedDuration {
     /// Beat when the stop starts in ms
     pub beat: i64,
     /// Duration of the stop in ms
@@ -50,8 +61,18 @@ pub struct StepmaniaStop {
 }
 
 #[derive(Debug, Default)]
+pub struct StepmaniaTimedBPM {
+    /// Beat when the stop starts in ms
+    pub beat: i64,
+    /// Duration of the stop in ms
+    pub bpm: i64,
+}
+
+#[derive(Debug, Default)]
 pub struct StepmaniaNumberRange {
+    /// Lower bounds
     min: i64,
+    /// Upper bounds
     max: i64,
 }
 
@@ -81,10 +102,11 @@ pub struct StepmaniaFile {
     pub foreground_changes: Option<Vec<StepmaniaVisualChange>>,
     pub offset: Option<i64>,
     pub keysounds: Option<Vec<String>>,
-    pub stops: Option<Vec<StepmaniaStop>>,
+    pub stops: Option<Vec<StepmaniaTimedDuration>>,
+    pub bpms: Option<Vec<StepmaniaTimedBPM>>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 struct UnparsedPropertyValue {
     pub raw: String,
     pub line: usize,
@@ -92,20 +114,8 @@ struct UnparsedPropertyValue {
     pub len: usize,
 }
 
-impl fmt::Display for UnparsedPropertyValue {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "\"{}\" ({}:{} - {})",
-            self.raw, self.line, self.column, self.len
-        )
-    }
-}
-
 #[derive(Debug, Default)]
 pub struct StepmaniaParser {
-    // The file name from where the source came from
-    file_name: Option<String>,
     // The calculcated line we're currently on
     line: usize,
     // The calculcated column we're currently on
@@ -135,6 +145,7 @@ const CHAR_VALUE_START: char = ':';
 const CHAR_VALUE_END: char = ';';
 const CHAR_OBJ_VAL_SEPARATOR: char = '=';
 const CHAR_OBJ_SEPARATOR: char = ',';
+const CHAR_COLOR_SEPARATOR: char = '^';
 
 const PRECISION_TIME: u8 = 3;
 const PRECISION_COLOR: u8 = 2;
@@ -329,7 +340,7 @@ impl StepmaniaParser {
             str_val = str_val.chars().take(idx_val + tmp).collect();
         }
 
-        match str_val.parse::<i64>() {
+        match str_val.trim().parse::<i64>() {
             Ok(val) => Some(val),
             Err(err) => {
                 println!("{:?}", err);
@@ -391,7 +402,8 @@ impl StepmaniaParser {
     /// Parses "a=b=c=d=e=f,1=2=3=4=5=6" to "[[a,b,c,d,e,f], [1,2,3,4,5,6]]"
     fn parse_to_value_entries(
         &mut self,
-        value: UnparsedPropertyValue,
+        value: &UnparsedPropertyValue,
+        groups: bool,
     ) -> Vec<Vec<UnparsedPropertyValue>> {
         let mut list: Vec<Vec<UnparsedPropertyValue>> = vec![];
         let mut latest_obj: Vec<UnparsedPropertyValue> = vec![];
@@ -402,7 +414,7 @@ impl StepmaniaParser {
         let mut start_pos: usize = 0;
 
         for (current_pos, c) in value.raw.chars().enumerate() {
-            if c == CHAR_OBJ_VAL_SEPARATOR {
+            if c == CHAR_OBJ_VAL_SEPARATOR && groups {
                 let len = current_pos - start_pos;
                 latest_obj.push(UnparsedPropertyValue {
                     raw: value.raw.chars().skip(start_pos).take(len).collect(),
@@ -417,6 +429,17 @@ impl StepmaniaParser {
             }
 
             if c == CHAR_OBJ_SEPARATOR {
+                let len = current_pos - start_pos;
+
+                if len > 0 {
+                    latest_obj.push(UnparsedPropertyValue {
+                        raw: value.raw.chars().skip(start_pos).take(len).collect(),
+                        line,
+                        column,
+                        len,
+                    });
+                }
+
                 list.push(latest_obj);
                 latest_obj = vec![];
                 has_latest = false;
@@ -467,6 +490,84 @@ impl StepmaniaParser {
         };
     }
 
+    fn parse_to_color_channel(&mut self, value: UnparsedPropertyValue) -> Option<u8> {
+        match value.raw.trim().parse::<f32>() {
+            Ok(float) => {
+                let parsed = (255.0 * float.clamp(0.0, 1.0)) as u8;
+                Some(parsed)
+            }
+            Err(err) => {
+                self.errors.push(ParseError {
+                    code: ParseErrorCode::StepmaniaInvalidColorValue,
+                    line: value.line,
+                    column: value.column,
+                    len: value.len,
+                });
+                None
+            }
+        }
+    }
+
+    fn parse_to_color(&mut self, value: UnparsedPropertyValue) -> StepmaniaColor {
+        let mut start_pos = 0;
+        let mut line = value.line;
+        let mut column = value.column;
+        let mut color = StepmaniaColor::default();
+        let mut color_pos = 0;
+
+        for (current_pos, c) in value.raw.chars().enumerate() {
+            if c != CHAR_COLOR_SEPARATOR {
+                if c == CHAR_LINE_BREAK {
+                    line += 1;
+                    column = 0;
+                    continue;
+                }
+                column += 1;
+                continue;
+            }
+
+            let len = current_pos - start_pos;
+            if let Some(cv) = self.parse_to_color_channel(UnparsedPropertyValue {
+                raw: value.raw.chars().skip(start_pos).take(len).collect(),
+                line,
+                column,
+                len,
+            }) {
+                match color_pos {
+                    0 => color.red = cv,
+                    1 => color.green = cv,
+                    2 => color.blue = cv,
+                    3 => color.alpha = cv,
+                    _ => {}
+                }
+            }
+
+            start_pos = current_pos + 1;
+            color_pos += 1;
+            column += 1;
+        }
+
+        if start_pos > 0 {
+            let len = value.raw.len() - start_pos + 1;
+            if let Some(cv) = self.parse_to_color_channel(UnparsedPropertyValue {
+                raw: value.raw.chars().skip(start_pos).take(len).collect(),
+                line,
+                column,
+                len,
+            }) {
+                match color_pos {
+                    0 => color.red = cv,
+                    1 => color.green = cv,
+                    2 => color.blue = cv,
+                    3 => color.alpha = cv,
+                    _ => {}
+                }
+            }
+        }
+
+        color
+    }
+
     fn parse_to_single_visual_change(
         &mut self,
         mut parts: Vec<UnparsedPropertyValue>,
@@ -515,7 +616,7 @@ impl StepmaniaParser {
         }
         if plen > 2 {
             let fp = parts.remove(0);
-            match fp.raw.parse::<f32>() {
+            match fp.raw.trim().parse::<f32>() {
                 Ok(float) => bg.update_rate = float as i64,
                 Err(_) => self.errors.push(ParseError {
                     code: ParseErrorCode::StepmaniaInvalidNumber,
@@ -543,6 +644,12 @@ impl StepmaniaParser {
         if plen > 8 {
             bg.transition = parts.remove(0).raw;
         }
+        if plen > 9 {
+            bg.color1 = self.parse_to_color(parts.remove(0));
+        }
+        if plen > 10 {
+            bg.color2 = self.parse_to_color(parts.remove(0));
+        }
 
         Some(bg)
     }
@@ -551,7 +658,7 @@ impl StepmaniaParser {
         &mut self,
         value: UnparsedPropertyValue,
     ) -> Option<Vec<StepmaniaVisualChange>> {
-        let parts = self.parse_to_value_entries(value);
+        let parts = self.parse_to_value_entries(&value, true);
         if parts.len() == 0 {
             return None;
         }
@@ -567,6 +674,40 @@ impl StepmaniaParser {
         Some(list)
     }
 
+    fn parse_to_string_list(&mut self, value: UnparsedPropertyValue) -> Vec<String> {
+        self.parse_to_value_entries(&value, false)
+            .iter()
+            .filter_map(|entry| entry.get(0).map(|v| v.raw.clone()))
+            .collect()
+    }
+
+    fn parse_to_instrument_tracks(
+        &mut self,
+        value: UnparsedPropertyValue,
+    ) -> Vec<StepmaniaInstrumentTrack> {
+        self.parse_to_value_entries(&value, true)
+            .iter()
+            .filter_map(|entry: &Vec<UnparsedPropertyValue>| {
+                let len = entry.len();
+                if len != 2 {
+                    self.errors.push(ParseError {
+                        code: ParseErrorCode::StepmaniaInvalidValueCount,
+                        line: value.line,
+                        column: value.column,
+                        len: value.len,
+                    })
+                }
+                if len < 2 {
+                    return None;
+                }
+                Some(StepmaniaInstrumentTrack {
+                    instrument: entry.get(0).unwrap().raw.clone(),
+                    file: entry.get(1).unwrap().raw.clone(),
+                })
+            })
+            .collect()
+    }
+
     pub fn parse_from_string(&mut self, input: &String) -> Result<StepmaniaFile> {
         let mut step: StepmaniaFile = StepmaniaFile::default();
 
@@ -578,6 +719,7 @@ impl StepmaniaParser {
                 "title" => step.title = Some(value.raw),
                 "titletranslit" => step.title_translit = Some(value.raw),
                 "subtitle" => step.subtitle = Some(value.raw),
+                "subtitletranslit" => step.subtitle_translit = Some(value.raw),
                 "artist" => step.artist = Some(value.raw),
                 "artisttranslist" => step.artist_translit = Some(value.raw),
                 "genre" => step.genre = Some(value.raw),
@@ -596,12 +738,20 @@ impl StepmaniaParser {
                     step.display_bpm = self.parse_to_number_range(value, PRECISION_TIME)
                 }
 
-                // background changes
+                // visual changes
                 "bgchanges" => step.background_changes = self.parse_to_visual_changes(value),
                 "bgchanges2" => step.background_changes2 = self.parse_to_visual_changes(value),
                 "bgchanges3" => step.background_changes3 = self.parse_to_visual_changes(value),
                 "fgchanges" => step.foreground_changes = self.parse_to_visual_changes(value),
                 "animations" => step.animations = self.parse_to_visual_changes(value),
+
+                // Keysounds
+                "keysounds" => step.keysounds = Some(self.parse_to_string_list(value)),
+
+                // Instrument Tracks
+                "instrumenttracks" => {
+                    step.instrument_tracks = Some(self.parse_to_instrument_tracks(value))
+                }
 
                 // Unhandled keys are not recognised, and should be marked as correct warning/error
                 _ => {
