@@ -31,7 +31,7 @@ impl StepmaniaColor {
 }
 
 #[derive(Debug, Default)]
-pub struct StepmaniaVisualChange {
+pub struct StepmaniaTimedVisualChange {
     /// Beat of the change in ms
     pub beat: i64,
     /// Path to the file for the change
@@ -69,11 +69,103 @@ pub struct StepmaniaTimedBPM {
 }
 
 #[derive(Debug, Default)]
+pub struct StepmaniaTimedTimeSignature {
+    /// Beat when the stop starts in ms
+    pub beat: i64,
+    /// Numerator the signature
+    pub numerator: u8,
+    /// Denominator of the signature
+    pub denominator: u8,
+}
+
+#[derive(Debug, Default)]
+pub struct StepmaniaTimedNumber {
+    /// Beat when the stop starts in ms
+    pub beat: i64,
+    /// The value/number
+    pub value: i32,
+}
+
+#[derive(Debug, Default)]
+pub struct StepmaniaTimedComboChange {
+    /// Beat when the stop starts in ms
+    pub beat: i64,
+    /// How much a single hit is worth for the combo
+    pub hit: u32,
+    /// How much a single miss will deal damage
+    pub miss: u32,
+}
+
+#[derive(Debug, Default)]
+pub struct StepmaniaTimedSpeedChange {
+    /// Beat when the stop starts in ms
+    pub beat: i64,
+    /// The ratio to be applied
+    pub ratio: f32,
+    /// How long the change should be applied for in ms or in s if `in_seconds` is true
+    pub duration: u32,
+    /// If the `duration` should be timed in seconds instead of milli-seconds
+    pub in_seconds: bool,
+}
+
+#[derive(Debug, Default)]
+pub struct StepmaniaTimedScrollSpeedChange {
+    /// Beat when the stop starts in ms
+    pub beat: i64,
+    /// The factor to apply
+    pub factor: f32,
+}
+
+#[derive(Debug, Default)]
+pub struct StepmaniaTimedLabel {
+    /// Beat when the stop starts in ms
+    pub beat: i64,
+    /// Label content to display
+    pub label: String,
+}
+
+#[derive(Debug, Default)]
 pub struct StepmaniaNumberRange {
     /// Lower bounds
-    min: i64,
+    pub min: i64,
     /// Upper bounds
-    max: i64,
+    pub max: i64,
+}
+
+#[derive(Debug, Default)]
+pub struct StepmaniaRadioValues {
+    stream: f32,
+    voltage: f32,
+    air: f32,
+    freeze: f32,
+    chaos: f32,
+}
+
+#[derive(Debug, Default)]
+pub struct StepmaniaAttackModifier {
+    /// Name of the Modifier
+    name: String,
+    /// The name of the player the modifier is applied to
+    player: String,
+    /// Approach rate how to ease the modifier
+    approach_rate: i32,
+    /// The magnitude of the modifier
+    magnitude: f32,
+    /// If the magnitude should be interpreted as percent
+    is_percent: bool,
+}
+
+#[derive(Debug, Default)]
+pub struct StepmaniaAttack {
+    duration: i64,
+    modifiers: Vec<String>,
+}
+
+#[derive(Debug, Default)]
+pub struct StepmaniaTimedAttack {
+    beat: i64,
+    duration: i64,
+    modifiers: Vec<StepmaniaAttackModifier>,
 }
 
 #[derive(Debug, Default)]
@@ -94,16 +186,25 @@ pub struct StepmaniaFile {
     pub sample_start: Option<i64>,
     pub sample_length: Option<i64>,
     pub display_bpm: Option<StepmaniaNumberRange>,
-    pub instrument_tracks: Option<Vec<StepmaniaInstrumentTrack>>,
-    pub background_changes: Option<Vec<StepmaniaVisualChange>>,
-    pub background_changes2: Option<Vec<StepmaniaVisualChange>>,
-    pub background_changes3: Option<Vec<StepmaniaVisualChange>>,
-    pub animations: Option<Vec<StepmaniaVisualChange>>,
-    pub foreground_changes: Option<Vec<StepmaniaVisualChange>>,
+    pub instrument_tracks: Vec<StepmaniaInstrumentTrack>,
+    pub background_changes: Vec<StepmaniaTimedVisualChange>,
+    pub background_changes2: Vec<StepmaniaTimedVisualChange>,
+    pub background_changes3: Vec<StepmaniaTimedVisualChange>,
+    pub animations: Vec<StepmaniaTimedVisualChange>,
+    pub foreground_changes: Vec<StepmaniaTimedVisualChange>,
     pub offset: Option<i64>,
-    pub keysounds: Option<Vec<String>>,
-    pub stops: Option<Vec<StepmaniaTimedDuration>>,
-    pub bpms: Option<Vec<StepmaniaTimedBPM>>,
+    pub keysounds: Vec<String>,
+    pub stops: Vec<StepmaniaTimedDuration>,
+    pub delays: Vec<StepmaniaTimedDuration>,
+    pub fakes: Vec<StepmaniaTimedDuration>,
+    pub bpms: Vec<StepmaniaTimedBPM>,
+    pub time_signatures: Vec<StepmaniaTimedTimeSignature>,
+    pub attacks: Vec<StepmaniaTimedAttack>,
+    pub tick_counts: Vec<StepmaniaTimedNumber>,
+    pub combos: Vec<StepmaniaTimedComboChange>,
+    pub speeds: Vec<StepmaniaTimedSpeedChange>,
+    pub scrolls: Vec<StepmaniaTimedScrollSpeedChange>,
+    pub labels: Vec<StepmaniaTimedLabel>,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -328,7 +429,7 @@ impl StepmaniaParser {
         let mut str_val = value.raw;
         let idx = str_val.find(".");
         // Always make sure we have at least the required precision
-        if (precision > 0) {
+        if precision > 0 {
             for _ in [0..(precision - 1)] {
                 str_val.push('0');
             }
@@ -496,7 +597,7 @@ impl StepmaniaParser {
                 let parsed = (255.0 * float.clamp(0.0, 1.0)) as u8;
                 Some(parsed)
             }
-            Err(err) => {
+            Err(_) => {
                 self.errors.push(ParseError {
                     code: ParseErrorCode::StepmaniaInvalidColorValue,
                     line: value.line,
@@ -568,31 +669,56 @@ impl StepmaniaParser {
         color
     }
 
-    fn parse_to_single_visual_change(
+    fn add_value_count_error(&mut self, entry: &Vec<UnparsedPropertyValue>) {
+        let first = entry.get(0).unwrap();
+        let mut total_len = entry.len() - 1;
+        for p in entry.iter() {
+            total_len += p.len;
+        }
+        self.errors.push(ParseError {
+            code: ParseErrorCode::StepmaniaInvalidValueCount,
+            line: first.line,
+            column: first.column,
+            len: total_len,
+        });
+    }
+
+    fn parse_value_group<T, F>(
         &mut self,
-        mut parts: Vec<UnparsedPropertyValue>,
-    ) -> Option<StepmaniaVisualChange> {
-        let plen = parts.len();
-        if plen == 0 {
-            return None;
-        }
+        value: &UnparsedPropertyValue,
+        min: usize,
+        max: usize,
+        mut mapper_fn: F,
+    ) -> Vec<T>
+    where
+        F: FnMut(&mut Self, Vec<UnparsedPropertyValue>) -> Option<T>,
+    {
+        let mut list: Vec<T> = vec![];
 
-        let first = parts.remove(0);
-        let mut total_len = plen - 1;
-
-        if plen != 11 {
-            for p in parts.iter() {
-                total_len += p.len;
+        for group in self.parse_to_value_entries(&value, true) {
+            let len = group.len();
+            if len < min {
+                continue;
             }
-            self.errors.push(ParseError {
-                code: ParseErrorCode::StepmaniaInvalidValueCount,
-                line: first.line,
-                column: first.column,
-                len: total_len,
-            });
+
+            if len < max {
+                self.add_value_count_error(&group);
+            }
+
+            if let Some(val) = mapper_fn(self, group) {
+                list.push(val);
+            }
         }
 
-        let mut bg = StepmaniaVisualChange {
+        list
+    }
+
+    fn parse_to_visual_change(
+        &mut self,
+        mut entry: Vec<UnparsedPropertyValue>,
+    ) -> Option<StepmaniaTimedVisualChange> {
+        let len = entry.len();
+        let mut bg = StepmaniaTimedVisualChange {
             beat: 0,
             path: String::new(),
             update_rate: 0,
@@ -606,16 +732,16 @@ impl StepmaniaParser {
             color2: StepmaniaColor::default(),
         };
 
-        if plen > 0 {
-            if let Some(beat) = self.parse_to_number(first, PRECISION_TIME) {
+        if len > 0 {
+            if let Some(beat) = self.parse_to_number(entry.remove(0), PRECISION_TIME) {
                 bg.beat = beat;
             }
         }
-        if plen > 1 {
-            bg.path = parts.remove(0).raw;
+        if len > 1 {
+            bg.path = entry.remove(0).raw;
         }
-        if plen > 2 {
-            let fp = parts.remove(0);
+        if len > 2 {
+            let fp = entry.remove(0);
             match fp.raw.trim().parse::<f32>() {
                 Ok(float) => bg.update_rate = float as i64,
                 Err(_) => self.errors.push(ParseError {
@@ -626,52 +752,32 @@ impl StepmaniaParser {
                 }),
             }
         }
-        if plen > 3 {
-            bg.crossfade = self.parse_to_bool(parts.remove(0));
+        if len > 3 {
+            bg.crossfade = self.parse_to_bool(entry.remove(0));
         }
-        if plen > 4 {
-            bg.stretch_rewind = self.parse_to_bool(parts.remove(0));
+        if len > 4 {
+            bg.stretch_rewind = self.parse_to_bool(entry.remove(0));
         }
-        if plen > 5 {
-            bg.stretch_no_loop = self.parse_to_bool(parts.remove(0));
+        if len > 5 {
+            bg.stretch_no_loop = self.parse_to_bool(entry.remove(0));
         }
-        if plen > 6 {
-            bg.effect = parts.remove(0).raw;
+        if len > 6 {
+            bg.effect = entry.remove(0).raw;
         }
-        if plen > 7 {
-            bg.file2 = parts.remove(0).raw;
+        if len > 7 {
+            bg.file2 = entry.remove(0).raw;
         }
-        if plen > 8 {
-            bg.transition = parts.remove(0).raw;
+        if len > 8 {
+            bg.transition = entry.remove(0).raw;
         }
-        if plen > 9 {
-            bg.color1 = self.parse_to_color(parts.remove(0));
+        if len > 9 {
+            bg.color1 = self.parse_to_color(entry.remove(0));
         }
-        if plen > 10 {
-            bg.color2 = self.parse_to_color(parts.remove(0));
+        if len > 10 {
+            bg.color2 = self.parse_to_color(entry.remove(0));
         }
 
         Some(bg)
-    }
-
-    fn parse_to_visual_changes(
-        &mut self,
-        value: UnparsedPropertyValue,
-    ) -> Option<Vec<StepmaniaVisualChange>> {
-        let parts = self.parse_to_value_entries(&value, true);
-        if parts.len() == 0 {
-            return None;
-        }
-
-        let mut list: Vec<StepmaniaVisualChange> = vec![];
-
-        for group in parts {
-            if let Some(bg) = self.parse_to_single_visual_change(group) {
-                list.push(bg);
-            }
-        }
-
-        Some(list)
     }
 
     fn parse_to_string_list(&mut self, value: UnparsedPropertyValue) -> Vec<String> {
@@ -681,31 +787,84 @@ impl StepmaniaParser {
             .collect()
     }
 
-    fn parse_to_instrument_tracks(
+    fn parse_to_instrument_track(
         &mut self,
-        value: UnparsedPropertyValue,
-    ) -> Vec<StepmaniaInstrumentTrack> {
-        self.parse_to_value_entries(&value, true)
-            .iter()
-            .filter_map(|entry: &Vec<UnparsedPropertyValue>| {
-                let len = entry.len();
-                if len != 2 {
-                    self.errors.push(ParseError {
-                        code: ParseErrorCode::StepmaniaInvalidValueCount,
-                        line: value.line,
-                        column: value.column,
-                        len: value.len,
-                    })
-                }
-                if len < 2 {
-                    return None;
-                }
-                Some(StepmaniaInstrumentTrack {
-                    instrument: entry.get(0).unwrap().raw.clone(),
-                    file: entry.get(1).unwrap().raw.clone(),
-                })
-            })
-            .collect()
+        group: Vec<UnparsedPropertyValue>,
+    ) -> Option<StepmaniaInstrumentTrack> {
+        Some(StepmaniaInstrumentTrack {
+            instrument: group.get(0).unwrap().raw.clone(),
+            file: group.get(1).unwrap().raw.clone(),
+        })
+    }
+
+    fn parse_to_timed_duration(
+        &mut self,
+        mut entry: Vec<UnparsedPropertyValue>,
+    ) -> Option<StepmaniaTimedDuration> {
+        let beat = self.parse_to_number(entry.remove(0), PRECISION_TIME);
+        let duration = self.parse_to_number(entry.remove(0), PRECISION_TIME);
+
+        if beat.is_none() || duration.is_none() {
+            return None;
+        }
+
+        return Some(StepmaniaTimedDuration {
+            beat: beat.unwrap(),
+            duration: duration.unwrap(),
+        });
+    }
+
+    fn parse_to_timed_bpm(
+        &mut self,
+        mut entry: Vec<UnparsedPropertyValue>,
+    ) -> Option<StepmaniaTimedBPM> {
+        let beat = self.parse_to_number(entry.remove(0), PRECISION_TIME);
+        let bpm = self.parse_to_number(entry.remove(0), PRECISION_TIME);
+
+        if beat.is_none() || bpm.is_none() {
+            return None;
+        }
+
+        return Some(StepmaniaTimedBPM {
+            beat: beat.unwrap(),
+            bpm: bpm.unwrap(),
+        });
+    }
+
+    fn parse_to_timed_time_signature(
+        &mut self,
+        mut entry: Vec<UnparsedPropertyValue>,
+    ) -> Option<StepmaniaTimedTimeSignature> {
+        let beat = self.parse_to_number(entry.remove(0), PRECISION_TIME);
+        let numerator = entry.remove(0).raw.trim().parse::<u8>();
+        let denominator = entry.remove(0).raw.trim().parse::<u8>();
+
+        if beat.is_none() || numerator.is_err() || denominator.is_err() {
+            return None;
+        }
+
+        return Some(StepmaniaTimedTimeSignature {
+            beat: beat.unwrap(),
+            numerator: numerator.unwrap(),
+            denominator: denominator.unwrap(),
+        });
+    }
+
+    fn parse_to_timed_number(
+        &mut self,
+        mut entry: Vec<UnparsedPropertyValue>,
+    ) -> Option<StepmaniaTimedNumber> {
+        let beat = self.parse_to_number(entry.remove(0), PRECISION_TIME);
+        let value = entry.remove(0).raw.trim().parse::<i32>();
+
+        if beat.is_none() || value.is_err() {
+            return None;
+        }
+
+        return Some(StepmaniaTimedNumber {
+            beat: beat.unwrap(),
+            value: value.unwrap(),
+        });
     }
 
     pub fn parse_from_string(&mut self, input: &String) -> Result<StepmaniaFile> {
@@ -739,18 +898,80 @@ impl StepmaniaParser {
                 }
 
                 // visual changes
-                "bgchanges" => step.background_changes = self.parse_to_visual_changes(value),
-                "bgchanges2" => step.background_changes2 = self.parse_to_visual_changes(value),
-                "bgchanges3" => step.background_changes3 = self.parse_to_visual_changes(value),
-                "fgchanges" => step.foreground_changes = self.parse_to_visual_changes(value),
-                "animations" => step.animations = self.parse_to_visual_changes(value),
+                "bgchanges" => {
+                    step.background_changes = self.parse_value_group(&value, 1, 11, |tmp, group| {
+                        tmp.parse_to_visual_change(group)
+                    })
+                }
+
+                "bgchanges2" => {
+                    step.background_changes2 =
+                        self.parse_value_group(&value, 1, 11, |tmp, group| {
+                            tmp.parse_to_visual_change(group)
+                        })
+                }
+                "bgchanges3" => {
+                    step.background_changes3 =
+                        self.parse_value_group(&value, 1, 11, |tmp, group| {
+                            tmp.parse_to_visual_change(group)
+                        })
+                }
+                "fgchanges" => {
+                    step.foreground_changes = self.parse_value_group(&value, 1, 11, |tmp, group| {
+                        tmp.parse_to_visual_change(group)
+                    })
+                }
+                "animations" => {
+                    step.animations = self.parse_value_group(&value, 1, 11, |tmp, group| {
+                        tmp.parse_to_visual_change(group)
+                    })
+                }
 
                 // Keysounds
-                "keysounds" => step.keysounds = Some(self.parse_to_string_list(value)),
+                "keysounds" => step.keysounds = self.parse_to_string_list(value),
 
                 // Instrument Tracks
                 "instrumenttracks" => {
-                    step.instrument_tracks = Some(self.parse_to_instrument_tracks(value))
+                    step.instrument_tracks = self.parse_value_group(&value, 2, 2, |tmp, group| {
+                        tmp.parse_to_instrument_track(group)
+                    })
+                }
+
+                // Timed durations
+                "stops" => {
+                    step.stops = self.parse_value_group(&value, 2, 2, |tmp, group| {
+                        tmp.parse_to_timed_duration(group)
+                    })
+                }
+                "delays" => {
+                    step.delays = self.parse_value_group(&value, 2, 2, |tmp, group| {
+                        tmp.parse_to_timed_duration(group)
+                    })
+                }
+                "fakes" => {
+                    step.fakes = self.parse_value_group(&value, 2, 2, |tmp, group| {
+                        tmp.parse_to_timed_duration(group)
+                    })
+                }
+
+                // Timed BPMs
+                "bpms" => {
+                    step.bpms = self
+                        .parse_value_group(&value, 2, 2, |tmp, group| tmp.parse_to_timed_bpm(group))
+                }
+
+                // Time signatures
+                "timesignatures" => {
+                    step.time_signatures = self.parse_value_group(&value, 3, 3, |tmp, group| {
+                        tmp.parse_to_timed_time_signature(group)
+                    })
+                }
+
+                // Numbers
+                "tickcounts" => {
+                    step.tick_counts = self.parse_value_group(&value, 2, 2, |tmp, group| {
+                        tmp.parse_to_timed_number(group)
+                    })
                 }
 
                 // Unhandled keys are not recognised, and should be marked as correct warning/error
