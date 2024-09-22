@@ -26,6 +26,12 @@ pub enum ParseErrorCode {
     StepmaniaInvalidColorValue,
     /// When the property count is not valid for the property
     StepmaniaInvalidValueCount,
+    /// When the value of an attack is unknown or invalid
+    StepmaniaInvalidAttackValue,
+    /// When a value of an attack has an invalid order of properties set
+    StepmaniaInvalidAttackValueOrder,
+    /// When the value of an attack modifier is invalid.
+    StepmaniaInvalidModifierValue,
 }
 
 #[derive(Debug)]

@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::fmt;
 
 use anyhow::Result;
 
@@ -11,7 +10,7 @@ pub struct StepmaniaInstrumentTrack {
     pub file: String,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct StepmaniaColor {
     pub red: u8,
     pub green: u8,
@@ -19,7 +18,7 @@ pub struct StepmaniaColor {
     pub alpha: u8,
 }
 
-impl StepmaniaColor {
+impl Default for StepmaniaColor {
     fn default() -> Self {
         StepmaniaColor {
             red: 0,
@@ -32,7 +31,7 @@ impl StepmaniaColor {
 
 #[derive(Debug, Default)]
 pub struct StepmaniaTimedVisualChange {
-    /// Beat of the change in ms
+    /// At which beat the visual change should apply
     pub beat: i64,
     /// Path to the file for the change
     pub path: String,
@@ -54,7 +53,7 @@ pub struct StepmaniaTimedVisualChange {
 
 #[derive(Debug, Default)]
 pub struct StepmaniaTimedDuration {
-    /// Beat when the stop starts in ms
+    /// At which beat the duration should apply
     pub beat: i64,
     /// Duration of the stop in ms
     pub duration: i64,
@@ -62,7 +61,7 @@ pub struct StepmaniaTimedDuration {
 
 #[derive(Debug, Default)]
 pub struct StepmaniaTimedBPM {
-    /// Beat when the stop starts in ms
+    /// At which beat the bpm change should apply
     pub beat: i64,
     /// Duration of the stop in ms
     pub bpm: i64,
@@ -70,7 +69,7 @@ pub struct StepmaniaTimedBPM {
 
 #[derive(Debug, Default)]
 pub struct StepmaniaTimedTimeSignature {
-    /// Beat when the stop starts in ms
+    /// At which beat the time signature should apply
     pub beat: i64,
     /// Numerator the signature
     pub numerator: u8,
@@ -80,7 +79,7 @@ pub struct StepmaniaTimedTimeSignature {
 
 #[derive(Debug, Default)]
 pub struct StepmaniaTimedNumber {
-    /// Beat when the stop starts in ms
+    /// At which beat the value should be applied
     pub beat: i64,
     /// The value/number
     pub value: i32,
@@ -88,7 +87,7 @@ pub struct StepmaniaTimedNumber {
 
 #[derive(Debug, Default)]
 pub struct StepmaniaTimedComboChange {
-    /// Beat when the stop starts in ms
+    /// At which beat the combo change should apply
     pub beat: i64,
     /// How much a single hit is worth for the combo
     pub hit: u32,
@@ -98,19 +97,19 @@ pub struct StepmaniaTimedComboChange {
 
 #[derive(Debug, Default)]
 pub struct StepmaniaTimedSpeedChange {
-    /// Beat when the stop starts in ms
+    /// At which beat the time-speed change should apply
     pub beat: i64,
     /// The ratio to be applied
     pub ratio: f32,
     /// How long the change should be applied for in ms or in s if `in_seconds` is true
-    pub duration: u32,
+    pub duration: i64,
     /// If the `duration` should be timed in seconds instead of milli-seconds
     pub in_seconds: bool,
 }
 
 #[derive(Debug, Default)]
 pub struct StepmaniaTimedScrollSpeedChange {
-    /// Beat when the stop starts in ms
+    /// At which beat the scroll-speed change should apply
     pub beat: i64,
     /// The factor to apply
     pub factor: f32,
@@ -118,7 +117,7 @@ pub struct StepmaniaTimedScrollSpeedChange {
 
 #[derive(Debug, Default)]
 pub struct StepmaniaTimedLabel {
-    /// Beat when the stop starts in ms
+    /// At which beat the label should appear
     pub beat: i64,
     /// Label content to display
     pub label: String,
@@ -134,38 +133,105 @@ pub struct StepmaniaNumberRange {
 
 #[derive(Debug, Default)]
 pub struct StepmaniaRadioValues {
-    stream: f32,
-    voltage: f32,
-    air: f32,
-    freeze: f32,
-    chaos: f32,
+    pub stream: f32,
+    pub voltage: f32,
+    pub air: f32,
+    pub freeze: f32,
+    pub chaos: f32,
+}
+
+#[derive(Debug)]
+pub enum StepmaniaMagnitude {
+    /// The amount in %
+    Percent(u16),
+    /// The amount in a 1000s parsed integer (i.E 1 = 1000 like the regular ms parsing)
+    Amount(i64),
+}
+
+impl Default for StepmaniaMagnitude {
+    fn default() -> Self {
+        StepmaniaMagnitude::Percent(0)
+    }
 }
 
 #[derive(Debug, Default)]
 pub struct StepmaniaAttackModifier {
     /// Name of the Modifier
-    name: String,
-    /// The name of the player the modifier is applied to
-    player: String,
+    pub name: String,
+    /// The name of the player the modifier is applied to.
+    /// Left empty to target all players.
+    pub player: Option<String>,
     /// Approach rate how to ease the modifier
-    approach_rate: i32,
-    /// The magnitude of the modifier
-    magnitude: f32,
-    /// If the magnitude should be interpreted as percent
-    is_percent: bool,
+    pub approach_rate: Option<u8>,
+    /// The magnitude of the modifier.
+    pub magnitude: StepmaniaMagnitude,
+}
+
+#[derive(Debug, Default)]
+pub struct StepmaniaNoteAttack {
+    /// Duration of the attack in seconds (NOT BEATS)
+    pub duration: i64,
+    /// The modifiers to apply during the Attack
+    pub modifiers: Vec<StepmaniaAttackModifier>,
 }
 
 #[derive(Debug, Default)]
 pub struct StepmaniaAttack {
-    duration: i64,
-    modifiers: Vec<String>,
+    /// The start of the Attack in seconds (NOT BEATS)
+    pub start: i64,
+    /// The duration for how long the Attack lasts in seconds (NOT BEATS)
+    pub duration: i64,
+    /// The modifiers to apply during the Attack
+    pub modifiers: Vec<StepmaniaAttackModifier>,
+}
+
+#[derive(Debug, Clone)]
+pub enum StepmaniaNoteType {
+    Empty,
+    Tap,
+    HoldHead,
+    RollHead,
+    Tail,
+    Mine,
+    Keysound,
+    Lift,
+    Fake,
+}
+
+impl Default for StepmaniaNoteType {
+    fn default() -> Self {
+        StepmaniaNoteType::Empty
+    }
 }
 
 #[derive(Debug, Default)]
-pub struct StepmaniaTimedAttack {
-    beat: i64,
-    duration: i64,
-    modifiers: Vec<StepmaniaAttackModifier>,
+struct StepmaniaChart {
+    pub chart_type: String,
+    pub credits: String,
+    pub difficulty: String,
+    pub rating: u8,
+    pub data: StepmaniaNoteData,
+}
+
+#[derive(Debug, Default)]
+struct StepmaniaNoteData {
+    pub column_count: u8,
+    pub notes: Vec<Vec<StepmaniaNote>>,
+}
+
+#[derive(Debug, Default)]
+pub struct StepmaniaNote {
+    pub note_type: StepmaniaNoteType,
+    pub keysound: Option<u32>,
+    pub actions: Vec<StepmaniaNoteAttack>,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct UnparsedPropertyValue {
+    pub raw: String,
+    pub line: usize,
+    pub column: usize,
+    pub len: usize,
 }
 
 #[derive(Debug, Default)]
@@ -199,20 +265,13 @@ pub struct StepmaniaFile {
     pub fakes: Vec<StepmaniaTimedDuration>,
     pub bpms: Vec<StepmaniaTimedBPM>,
     pub time_signatures: Vec<StepmaniaTimedTimeSignature>,
-    pub attacks: Vec<StepmaniaTimedAttack>,
+    pub attacks: Vec<StepmaniaAttack>,
     pub tick_counts: Vec<StepmaniaTimedNumber>,
     pub combos: Vec<StepmaniaTimedComboChange>,
     pub speeds: Vec<StepmaniaTimedSpeedChange>,
     pub scrolls: Vec<StepmaniaTimedScrollSpeedChange>,
     pub labels: Vec<StepmaniaTimedLabel>,
-}
-
-#[derive(Debug, Default, Clone)]
-struct UnparsedPropertyValue {
-    pub raw: String,
-    pub line: usize,
-    pub column: usize,
-    pub len: usize,
+    pub notes: Option<StepmaniaChart>,
 }
 
 #[derive(Debug, Default)]
@@ -247,6 +306,18 @@ const CHAR_VALUE_END: char = ';';
 const CHAR_OBJ_VAL_SEPARATOR: char = '=';
 const CHAR_OBJ_SEPARATOR: char = ',';
 const CHAR_COLOR_SEPARATOR: char = '^';
+const CHAR_ATTACK_VALUE_SEPARATOR: char = ':';
+const CHAR_ATTACK_KEY_SEPARATOR: char = '=';
+
+const NOTE_EMPTY: char = '0';
+const NOTE_TAP: char = '1';
+const NOTE_HOLD_HEAD: char = '2';
+const NOTE_ROLL_HEAD: char = '4';
+const NOTE_TAIL: char = '3';
+const NOTE_MINE: char = 'M';
+const NOTE_KEYSOUND: char = 'K';
+const NOTE_LIFT: char = 'L';
+const NOTE_FAKE: char = 'F';
 
 const PRECISION_TIME: u8 = 3;
 const PRECISION_COLOR: u8 = 2;
@@ -867,6 +938,251 @@ impl StepmaniaParser {
         });
     }
 
+    fn parse_to_timed_combo_change(
+        &mut self,
+        mut entry: Vec<UnparsedPropertyValue>,
+    ) -> Option<StepmaniaTimedComboChange> {
+        let beat = self.parse_to_number(entry.remove(0), PRECISION_TIME);
+        let hit = entry.remove(0).raw.trim().parse::<u32>();
+        let miss = entry.remove(0).raw.trim().parse::<u32>();
+
+        if beat.is_none() || hit.is_err() || miss.is_err() {
+            return None;
+        }
+
+        return Some(StepmaniaTimedComboChange {
+            beat: beat.unwrap(),
+            hit: hit.unwrap(),
+            miss: miss.unwrap(),
+        });
+    }
+
+    fn parse_to_timed_speed_change(
+        &mut self,
+        mut entry: Vec<UnparsedPropertyValue>,
+    ) -> Option<StepmaniaTimedSpeedChange> {
+        let beat = self.parse_to_number(entry.remove(0), PRECISION_TIME);
+        let ratio = entry.remove(0).raw.trim().parse::<f32>();
+        let duration = self.parse_to_number(entry.remove(0), PRECISION_TIME);
+        let in_seconds = entry.remove(0).raw.trim().parse::<u32>();
+
+        if beat.is_none() || ratio.is_err() || duration.is_none() || in_seconds.is_err() {
+            return None;
+        }
+
+        return Some(StepmaniaTimedSpeedChange {
+            beat: beat.unwrap(),
+            ratio: ratio.unwrap(),
+            duration: duration.unwrap(),
+            in_seconds: in_seconds.unwrap() == 1,
+        });
+    }
+
+    fn parse_to_timed_scroll_speed_change(
+        &mut self,
+        mut entry: Vec<UnparsedPropertyValue>,
+    ) -> Option<StepmaniaTimedScrollSpeedChange> {
+        let beat = self.parse_to_number(entry.remove(0), PRECISION_TIME);
+        let factor = entry.remove(0).raw.trim().parse::<f32>();
+
+        if beat.is_none() || factor.is_err() {
+            return None;
+        }
+
+        return Some(StepmaniaTimedScrollSpeedChange {
+            beat: beat.unwrap(),
+            factor: factor.unwrap(),
+        });
+    }
+
+    fn parse_to_timed_label(
+        &mut self,
+        mut entry: Vec<UnparsedPropertyValue>,
+    ) -> Option<StepmaniaTimedLabel> {
+        let beat = self.parse_to_number(entry.remove(0), PRECISION_TIME);
+
+        if beat.is_none() {
+            return None;
+        }
+
+        return Some(StepmaniaTimedLabel {
+            beat: beat.unwrap(),
+            label: entry.remove(0).raw,
+        });
+    }
+
+    fn parse_attack_modifiers(
+        &mut self,
+        value: UnparsedPropertyValue,
+    ) -> Vec<StepmaniaAttackModifier> {
+        vec![]
+    }
+
+    fn parse_attacks(&mut self, value: UnparsedPropertyValue) -> Vec<StepmaniaAttack> {
+        // I have it so much that attacks have this abomination of a format
+        // Absolute ass to parse and is different from all other properties for no reason.
+        let mut list: Vec<StepmaniaAttack> = vec![];
+
+        // In progress elements
+        let mut segment_name: String = String::new();
+        let mut start_val: i64 = 0;
+        let mut len_val: i64 = 0;
+        let mut element_idx = 0;
+
+        // Positions
+        let mut current_line = value.line;
+        let mut current_pos = 0;
+        let mut start_line = value.line;
+        let mut start_pos = 0;
+
+        for c in value.raw.chars() {
+            if c == CHAR_ATTACK_KEY_SEPARATOR {
+                let len: usize = current_pos - start_pos;
+                segment_name = value
+                    .raw
+                    .chars()
+                    .skip(start_pos)
+                    .take(len)
+                    .collect::<String>()
+                    .trim()
+                    .to_lowercase();
+                start_line = current_line;
+                start_pos = current_pos + 1;
+            } else if c == CHAR_ATTACK_VALUE_SEPARATOR {
+                let len: usize = current_pos - start_pos;
+                let tmp_value = value
+                    .raw
+                    .chars()
+                    .skip(start_pos)
+                    .take(len)
+                    .collect::<String>();
+                let tmp_unparsed = UnparsedPropertyValue {
+                    line: start_line,
+                    column: start_pos,
+                    len,
+                    raw: tmp_value,
+                };
+
+                match (element_idx, segment_name.as_str()) {
+                    (_, "time") => {
+                        if element_idx != 0 {
+                            self.errors.push(ParseError {
+                                code: ParseErrorCode::StepmaniaInvalidAttackValueOrder,
+                                line: start_line,
+                                column: start_pos,
+                                len,
+                            });
+                            // Reset to make the next steps not screw up completely.
+                            element_idx = 0;
+                        }
+
+                        if let Some(time) = self.parse_to_number(tmp_unparsed, PRECISION_TIME) {
+                            start_val = time;
+                        }
+                    }
+                    (1, "end") | (1, "len") => {
+                        if let Some(val) = self.parse_to_number(tmp_unparsed, PRECISION_TIME) {
+                            len_val = if segment_name.as_str() == "len" {
+                                val
+                            } else {
+                                val - start_val
+                            };
+                        }
+                    }
+                    (2, "mods") => {
+                        list.push(StepmaniaAttack {
+                            start: start_val,
+                            duration: len_val,
+                            modifiers: self.parse_attack_modifiers(tmp_unparsed),
+                        });
+                        start_val = 0;
+                        len_val = 0;
+                    }
+                    _ => self.errors.push(ParseError {
+                        code: ParseErrorCode::StepmaniaInvalidAttackValue,
+                        line: start_line,
+                        column: start_pos,
+                        len,
+                    }),
+                }
+
+                start_line = current_line;
+                start_pos = current_pos + 1;
+                element_idx = (element_idx + 1) % 3;
+            }
+
+            if c == CHAR_LINE_BREAK {
+                current_line += 1;
+            }
+
+            current_pos += 1;
+        }
+
+        // TODO: Find a way to prevent copy-paste here
+        let len: usize = value.raw.len() - start_pos;
+        let tmp_value = value
+            .raw
+            .chars()
+            .skip(start_pos)
+            .take(len)
+            .collect::<String>();
+        let tmp_unparsed = UnparsedPropertyValue {
+            line: start_line,
+            column: start_pos,
+            len,
+            raw: tmp_value,
+        };
+
+        match (element_idx, segment_name.as_str()) {
+            (_, "time") => {
+                if element_idx != 0 {
+                    self.errors.push(ParseError {
+                        code: ParseErrorCode::StepmaniaInvalidAttackValueOrder,
+                        line: start_line,
+                        column: start_pos,
+                        len,
+                    });
+                    // Reset to make the next steps not screw up completely.
+                    element_idx = 0;
+                }
+
+                if let Some(time) = self.parse_to_number(tmp_unparsed, PRECISION_TIME) {
+                    start_val = time;
+                }
+            }
+            (1, "end") | (1, "len") => {
+                if let Some(val) = self.parse_to_number(tmp_unparsed, PRECISION_TIME) {
+                    len_val = if segment_name.as_str() == "len" {
+                        val
+                    } else {
+                        val - start_val
+                    };
+                }
+            }
+            (2, "mods") => {
+                list.push(StepmaniaAttack {
+                    start: start_val,
+                    duration: len_val,
+                    modifiers: self.parse_attack_modifiers(tmp_unparsed),
+                });
+            }
+            _ => self.errors.push(ParseError {
+                code: ParseErrorCode::StepmaniaInvalidAttackValue,
+                line: start_line,
+                column: start_pos,
+                len,
+            }),
+        }
+
+        return list;
+    }
+
+    fn parse_to_chart(&mut self, input: UnparsedPropertyValue) -> StepmaniaChart {
+        StepmaniaChart {
+            ..Default::default()
+        }
+    }
+
     pub fn parse_from_string(&mut self, input: &String) -> Result<StepmaniaFile> {
         let mut step: StepmaniaFile = StepmaniaFile::default();
 
@@ -938,7 +1254,7 @@ impl StepmaniaParser {
                 }
 
                 // Timed durations
-                "stops" => {
+                "freezes" | "stops" => {
                     step.stops = self.parse_value_group(&value, 2, 2, |tmp, group| {
                         tmp.parse_to_timed_duration(group)
                     })
@@ -971,6 +1287,37 @@ impl StepmaniaParser {
                 "tickcounts" => {
                     step.tick_counts = self.parse_value_group(&value, 2, 2, |tmp, group| {
                         tmp.parse_to_timed_number(group)
+                    })
+                }
+
+                // Attacks
+                "attacks" => step.attacks = self.parse_attacks(value),
+
+                // Combo changes
+                "combos" => {
+                    step.combos = self.parse_value_group(&value, 3, 3, |tmp, group| {
+                        tmp.parse_to_timed_combo_change(group)
+                    })
+                }
+
+                // Speed changes
+                "speeds" => {
+                    step.speeds = self.parse_value_group(&value, 4, 4, |tmp, group| {
+                        tmp.parse_to_timed_speed_change(group)
+                    })
+                }
+
+                // Scroll speed changes
+                "scrolls" => {
+                    step.scrolls = self.parse_value_group(&value, 2, 2, |tmp, group| {
+                        tmp.parse_to_timed_scroll_speed_change(group)
+                    })
+                }
+
+                // Labels
+                "labels" => {
+                    step.labels = self.parse_value_group(&value, 2, 2, |tmp, group| {
+                        tmp.parse_to_timed_label(group)
                     })
                 }
 
