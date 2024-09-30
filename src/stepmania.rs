@@ -6,7 +6,9 @@ use super::common::*;
 
 #[derive(Debug, Default)]
 pub struct StepmaniaInstrumentTrack {
+    /// The instrument name
     pub instrument: String,
+    /// Relative path to the instrument track
     pub file: String,
 }
 
@@ -35,8 +37,8 @@ pub struct StepmaniaTimedVisualChange {
     pub beat: i64,
     /// Path to the file for the change
     pub path: String,
-    /// The update rate of the change, f32 as i64
-    pub update_rate: i64,
+    /// The rate of how fast the image/video should be played
+    pub play_rate: i64,
     /// If it should cross fade between the previous and this change
     pub crossfade: bool,
     pub stretch_rewind: bool,
@@ -131,8 +133,26 @@ pub struct StepmaniaNumberRange {
     pub max: i64,
 }
 
+#[derive(Debug)]
+pub enum StepmaniaBPMRange {
+    /// A single BPM value
+    Single(i64),
+    /// A range of BPM (from - to)
+    Range(i64, i64),
+    /// A randomly updated/displayed BPM
+    Random,
+}
+
 #[derive(Debug, Default)]
-pub struct StepmaniaRadioValues {
+pub struct StepmaniaWarp {
+    /// At which beat the warp starts
+    pub beat: i64,
+    /// At which beat the warp ends
+    pub end_beat: i64,
+}
+
+#[derive(Debug, Default)]
+pub struct StepmaniaRadarValues {
     pub stream: f32,
     pub voltage: f32,
     pub air: f32,
@@ -204,17 +224,74 @@ impl Default for StepmaniaNoteType {
     }
 }
 
+impl StepmaniaNoteType {
+    pub fn from_char(c: char) -> Self {
+        match c {
+            NOTE_EMPTY => StepmaniaNoteType::Empty,
+            NOTE_TAP => StepmaniaNoteType::Tap,
+            NOTE_HOLD_HEAD => StepmaniaNoteType::HoldHead,
+            NOTE_ROLL_HEAD => StepmaniaNoteType::RollHead,
+            NOTE_TAIL => StepmaniaNoteType::Tail,
+            NOTE_MINE => StepmaniaNoteType::Mine,
+            NOTE_KEYSOUND => StepmaniaNoteType::Keysound,
+            NOTE_LIFT => StepmaniaNoteType::Lift,
+            NOTE_FAKE => StepmaniaNoteType::Fake,
+            _ => StepmaniaNoteType::Empty,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum StepmaniaDifficulty {
+    Beginner,
+    Easy,
+    Medium,
+    Hard,
+    Challenge,
+    Edit,
+}
+
+impl Default for StepmaniaDifficulty {
+    fn default() -> Self {
+        StepmaniaDifficulty::Edit
+    }
+}
+
+impl StepmaniaDifficulty {
+    pub fn from_str(str: &str) -> Self {
+        match str.to_lowercase().as_str() {
+            "beginner" => StepmaniaDifficulty::Beginner,
+            "easy" => StepmaniaDifficulty::Easy,
+            "medium" => StepmaniaDifficulty::Medium,
+            "hard" => StepmaniaDifficulty::Hard,
+            "challange" => StepmaniaDifficulty::Challenge,
+            _ => StepmaniaDifficulty::Edit,
+        }
+    }
+}
+
 #[derive(Debug, Default)]
-struct StepmaniaChart {
-    pub chart_type: String,
-    pub credits: String,
-    pub difficulty: String,
-    pub rating: u8,
+pub struct StepmaniaChart {
+    /// Name of the chart (SSC)
+    pub name: Option<String>,
+    /// The type of the game mode (i.E. dance-single, dance-double, ...)
+    pub step_style: String,
+    // Custom name for the step-style
+    pub chart_style: Option<String>,
+    /// The charter/creator
+    pub credit: String,
+    /// Difficulty of the chart
+    pub difficulty: StepmaniaDifficulty,
+    /// The difficulty/rating of the chart as number
+    pub meter: u16,
+    /// Radar-Values which describe the skillsets
+    pub radar_values: StepmaniaRadarValues,
+    /// The note-data
     pub data: StepmaniaNoteData,
 }
 
 #[derive(Debug, Default)]
-struct StepmaniaNoteData {
+pub struct StepmaniaNoteData {
     pub column_count: u8,
     pub notes: Vec<Vec<StepmaniaNote>>,
 }
@@ -236,41 +313,100 @@ pub struct UnparsedPropertyValue {
 
 #[derive(Debug, Default)]
 pub struct StepmaniaFile {
+    /// Version of the SSC format
+    pub version: Option<String>,
+    /// Title of the song, in the original language
     pub title: Option<String>,
+    /// Title of the song, translated to english (if title isn't english already)
     pub title_translit: Option<String>,
+    /// Subtitle of the song, in the original language
     pub subtitle: Option<String>,
+    /// Subtitle of the song, translated to english (if subtitle isn't english already)
     pub subtitle_translit: Option<String>,
+    /// The Artist of the song, in the original language
     pub artist: Option<String>,
+    /// The Artist of the song, "translated" to english (usually only romanji versions)
     pub artist_translit: Option<String>,
+    /// The genre of the song
     pub genre: Option<String>,
+    /// The author or the pack/mix of the chart
     pub credit: Option<String>,
+    /// Relative path to the banner image
     pub banner: Option<String>,
+    /// Relative path to the background image
     pub background: Option<String>,
-    pub lyricspath: Option<String>,
-    pub cdtitle: Option<String>,
+    /// Relative path to the lyrics file (.lrc)
+    pub lyrics_path: Option<String>,
+    /// Relative path to the cd-title image
+    pub cd_title: Option<String>,
+    /// Relative path to the music file
     pub music: Option<String>,
+    /// Where the song came from if it's a crossover from an existing game.
+    pub origin: Option<String>,
+    /// Relative path to the jacket image
+    pub jacket: Option<String>,
+    /// Relative path to the CD image
+    pub cd_image: Option<String>,
+    /// Relative path to the disk image
+    pub disk_image: Option<String>,
+    /// Relative path to the preview song/file.
+    /// If provided, will be used instead of `sample_start` and `sample_length`.
+    pub preview: Option<String>,
+    /// Starting time for the sample/preview in ms
     pub sample_start: Option<i64>,
+    /// Duration/length of the sample/preview in ms
     pub sample_length: Option<i64>,
+    /// A float value. Tells StepMania when to end the song if your longest chart is shorter than this value.
+    /// Normally song length is determined by the longest chart.
+    /// Required if your chart has only EDIT difficulties, as EDITs are not factored into song length calculation.
+    pub last_second_hint: Option<i64>,
+    /// The range of BPM the song has
+    // TODO: Change to StepmaniaBPMRange
     pub display_bpm: Option<StepmaniaNumberRange>,
+    /// If the chart is selectable/should be hidden
+    pub selectable: bool,
+    /// The different assignments of instruments and their audio file
     pub instrument_tracks: Vec<StepmaniaInstrumentTrack>,
+    /// Transitions/Changes to the background layer 1
     pub background_changes: Vec<StepmaniaTimedVisualChange>,
+    /// Transitions/Changes to the background layer 2
     pub background_changes2: Vec<StepmaniaTimedVisualChange>,
+    /// Transitions/Changes to the background layer 3
     pub background_changes3: Vec<StepmaniaTimedVisualChange>,
+    /// Transitions/Changes to the animations layer
     pub animations: Vec<StepmaniaTimedVisualChange>,
+    /// Transitions/Changes to the foreground layer
     pub foreground_changes: Vec<StepmaniaTimedVisualChange>,
+    /// The offset between the beginning of the song and the start of the note data in ms
     pub offset: Option<i64>,
+    /// Keysound files which are referenced in the note-data
     pub keysounds: Vec<String>,
+    /// The stops to apply at specific times
     pub stops: Vec<StepmaniaTimedDuration>,
+    /// The delays to apply at specific times
     pub delays: Vec<StepmaniaTimedDuration>,
+    /// The fake sections to apply at specific times
     pub fakes: Vec<StepmaniaTimedDuration>,
+    /// BPM changes to apply at specific times
     pub bpms: Vec<StepmaniaTimedBPM>,
+    /// Time signature changes to apply at specific times
     pub time_signatures: Vec<StepmaniaTimedTimeSignature>,
+    /// Attacks to apply at specific times
     pub attacks: Vec<StepmaniaAttack>,
+    /// The checkpoint-hold tick rate count to apply at specific times
     pub tick_counts: Vec<StepmaniaTimedNumber>,
+    /// The combo changes to apply at specific times
     pub combos: Vec<StepmaniaTimedComboChange>,
+    /// The speed changes to apply at specific times
     pub speeds: Vec<StepmaniaTimedSpeedChange>,
+    /// The scroll-speed changes to apply at specific times
     pub scrolls: Vec<StepmaniaTimedScrollSpeedChange>,
+    /// The warps to be applied at specific times
+    pub warps: Vec<StepmaniaWarp>,
+    /// The labels to display at specific times
     pub labels: Vec<StepmaniaTimedLabel>,
+    /// The SM chart content
+    // TODO: Change to vec, since SSC can define multiple charts in a file
     pub notes: Option<StepmaniaChart>,
 }
 
@@ -288,6 +424,30 @@ pub struct StepmaniaParser {
     latest_errors: HashMap<ParseErrorCode, ParseError>,
     // The latest name/key we have to parse before hand.
     latest_name: String,
+}
+
+#[derive(Debug, PartialEq, PartialOrd)]
+enum ChartParserState {
+    Type,
+    Credits,
+    Difficulty,
+    Rating,
+    RadioValues,
+    Notes,
+    InlineKeysound,
+    InlineAttack,
+}
+
+impl ChartParserState {
+    pub fn next(&self) -> ChartParserState {
+        match self {
+            ChartParserState::Type => ChartParserState::Credits,
+            ChartParserState::Credits => ChartParserState::Difficulty,
+            ChartParserState::Difficulty => ChartParserState::Rating,
+            ChartParserState::Rating => ChartParserState::RadioValues,
+            _ => ChartParserState::Notes,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -308,6 +468,12 @@ const CHAR_OBJ_SEPARATOR: char = ',';
 const CHAR_COLOR_SEPARATOR: char = '^';
 const CHAR_ATTACK_VALUE_SEPARATOR: char = ':';
 const CHAR_ATTACK_KEY_SEPARATOR: char = '=';
+const CHAR_NOTE_PROP_SEPARATOR: char = ':';
+const CHAR_INLINE_ATTACK_START: char = '{';
+const CHAR_INLINE_ATTACK_END: char = '}';
+const CHAR_INLINE_KEYSOUND_START: char = '[';
+const CHAR_INLINE_KEYSOUND_END: char = ']';
+const CHAR_BEAT_SEPARATOR: char = ',';
 
 const NOTE_EMPTY: char = '0';
 const NOTE_TAP: char = '1';
@@ -497,11 +663,11 @@ impl StepmaniaParser {
     /// The numbers that we handle in SM files are typically always timings or time related.
     /// Converts them to ms times, and all precision after 3 is lost (we dont do ns timings here)
     fn parse_to_number(&mut self, value: UnparsedPropertyValue, precision: u8) -> Option<i64> {
-        let mut str_val = value.raw;
+        let mut str_val = value.raw.trim().to_string();
         let idx = str_val.find(".");
         // Always make sure we have at least the required precision
         if precision > 0 {
-            for _ in [0..(precision - 1)] {
+            for _ in 0..precision {
                 str_val.push('0');
             }
         }
@@ -792,7 +958,7 @@ impl StepmaniaParser {
         let mut bg = StepmaniaTimedVisualChange {
             beat: 0,
             path: String::new(),
-            update_rate: 0,
+            play_rate: 0,
             crossfade: false,
             stretch_rewind: false,
             stretch_no_loop: false,
@@ -814,7 +980,7 @@ impl StepmaniaParser {
         if len > 2 {
             let fp = entry.remove(0);
             match fp.raw.trim().parse::<f32>() {
-                Ok(float) => bg.update_rate = float as i64,
+                Ok(float) => bg.play_rate = float as i64,
                 Err(_) => self.errors.push(ParseError {
                     code: ParseErrorCode::StepmaniaInvalidNumber,
                     line: fp.line,
@@ -854,7 +1020,7 @@ impl StepmaniaParser {
     fn parse_to_string_list(&mut self, value: UnparsedPropertyValue) -> Vec<String> {
         self.parse_to_value_entries(&value, false)
             .iter()
-            .filter_map(|entry| entry.get(0).map(|v| v.raw.clone()))
+            .filter_map(|entry| entry.get(0).map(|v| v.raw.clone().trim().to_string()))
             .collect()
     }
 
@@ -863,8 +1029,8 @@ impl StepmaniaParser {
         group: Vec<UnparsedPropertyValue>,
     ) -> Option<StepmaniaInstrumentTrack> {
         Some(StepmaniaInstrumentTrack {
-            instrument: group.get(0).unwrap().raw.clone(),
-            file: group.get(1).unwrap().raw.clone(),
+            instrument: group.get(0).unwrap().raw.clone().trim().to_string(),
+            file: group.get(1).unwrap().raw.clone().trim().to_string(),
         })
     }
 
@@ -1007,7 +1173,7 @@ impl StepmaniaParser {
 
         return Some(StepmaniaTimedLabel {
             beat: beat.unwrap(),
-            label: entry.remove(0).raw,
+            label: entry.remove(0).raw.trim().to_string(),
         });
     }
 
@@ -1177,10 +1343,155 @@ impl StepmaniaParser {
         return list;
     }
 
-    fn parse_to_chart(&mut self, input: UnparsedPropertyValue) -> StepmaniaChart {
-        StepmaniaChart {
+    fn parse_to_radio_values(
+        &mut self,
+        input: UnparsedPropertyValue,
+    ) -> Option<StepmaniaRadarValues> {
+        Some(StepmaniaRadarValues {
             ..Default::default()
+        })
+    }
+
+    fn parse_to_chart(&mut self, input: UnparsedPropertyValue) -> Option<StepmaniaChart> {
+        let mut state = ChartParserState::Type;
+        let mut start_idx: usize = 0;
+        let mut line = input.line;
+        let mut col = input.column;
+        let mut chart = StepmaniaChart {
+            ..Default::default()
+        };
+        let mut current_beat_notes: Vec<StepmaniaNote> = vec![];
+
+        for (idx, c) in input.raw.chars().enumerate() {
+            match state {
+                ChartParserState::Type
+                | ChartParserState::Credits
+                | ChartParserState::Difficulty
+                | ChartParserState::Rating
+                | ChartParserState::RadioValues => {
+                    if c != CHAR_NOTE_PROP_SEPARATOR {
+                        if c == CHAR_LINE_BREAK {
+                            col = 1;
+                            line += 1;
+                        } else {
+                            col += 1;
+                        }
+                        continue;
+                    }
+
+                    let str = input
+                        .raw
+                        .chars()
+                        .skip(start_idx)
+                        .take(idx)
+                        .collect::<String>()
+                        .trim()
+                        .to_owned();
+                    match state {
+                        ChartParserState::Type => chart.step_style = str,
+                        ChartParserState::Credits => chart.credit = str,
+                        ChartParserState::Difficulty => {
+                            chart.difficulty = StepmaniaDifficulty::from_str(&str)
+                        }
+                        ChartParserState::Rating => match str.parse::<u16>() {
+                            Ok(rating) => chart.meter = rating,
+                            Err(_) => self.errors.push(ParseError {
+                                code: ParseErrorCode::StepmaniaInvalidNumber,
+                                column: col,
+                                line: line,
+                                len: str.len(),
+                            }),
+                        },
+                        ChartParserState::RadioValues => {
+                            if let Some(val) = self.parse_to_radio_values(UnparsedPropertyValue {
+                                len: str.len(),
+                                raw: str,
+                                column: col,
+                                line: line,
+                            }) {
+                                chart.radar_values = val;
+                            }
+                        }
+                        _ => {
+                            // Never happens
+                        }
+                    }
+
+                    col += 1;
+                    start_idx = idx + 1;
+                    state = state.next();
+                }
+                ChartParserState::InlineAttack => {
+                    if c == CHAR_INLINE_ATTACK_END {
+                        state = ChartParserState::Notes;
+                        // TODO: Do parsing
+                        continue;
+                    }
+                }
+                ChartParserState::InlineKeysound => {
+                    if c == CHAR_INLINE_KEYSOUND_END {
+                        state = ChartParserState::Notes;
+                        col += 1;
+                        // TOOD: Do parsing
+                        continue;
+                    }
+                }
+                ChartParserState::Notes => match c {
+                    CHAR_INLINE_ATTACK_START => {
+                        state = ChartParserState::InlineAttack;
+                        col += 1;
+                        continue;
+                    }
+                    CHAR_INLINE_KEYSOUND_START => {
+                        state = ChartParserState::InlineKeysound;
+                        col += 1;
+                        continue;
+                    }
+                    CHAR_BEAT_SEPARATOR => {
+                        chart.data.notes.push(current_beat_notes);
+                        current_beat_notes = vec![];
+                        col += 1;
+                    }
+                    // All valid note types
+                    NOTE_EMPTY | NOTE_TAP | NOTE_HOLD_HEAD | NOTE_ROLL_HEAD | NOTE_TAIL
+                    | NOTE_MINE | NOTE_KEYSOUND | NOTE_LIFT | NOTE_FAKE => {
+                        current_beat_notes.push(StepmaniaNote {
+                            note_type: StepmaniaNoteType::from_char(c),
+                            actions: vec![],
+                            keysound: None,
+                        });
+                        col += 1;
+                    }
+                    // We need to find the column count and we do this not based on the type for now,
+                    // but based on the note count in the first line.
+                    CHAR_LINE_BREAK => {
+                        if chart.data.column_count == 0 && current_beat_notes.len() > 0 {
+                            match u8::try_from(current_beat_notes.len()) {
+                                Ok(col) => chart.data.column_count = col,
+                                Err(_) => {
+                                    // TODO: Handle error
+                                }
+                            }
+                        }
+                        col = 1;
+                        line += 1;
+                    }
+                    _ => {
+                        col += 1;
+                        if !c.is_whitespace() {
+                            // TODO: Throw error
+                            continue;
+                        }
+                    }
+                },
+            }
         }
+
+        if current_beat_notes.len() > 0 {
+            chart.data.notes.push(current_beat_notes)
+        }
+
+        return Some(chart);
     }
 
     pub fn parse_from_string(&mut self, input: &String) -> Result<StepmaniaFile> {
@@ -1191,19 +1502,37 @@ impl StepmaniaParser {
         for (name, value) in result.unwrap() {
             match name.as_str() {
                 // Simple string values
-                "title" => step.title = Some(value.raw),
-                "titletranslit" => step.title_translit = Some(value.raw),
-                "subtitle" => step.subtitle = Some(value.raw),
-                "subtitletranslit" => step.subtitle_translit = Some(value.raw),
-                "artist" => step.artist = Some(value.raw),
-                "artisttranslist" => step.artist_translit = Some(value.raw),
-                "genre" => step.genre = Some(value.raw),
-                "credit" => step.credit = Some(value.raw),
-                "banner" => step.banner = Some(value.raw),
-                "background" => step.background = Some(value.raw),
-                "lyricspath" => step.lyricspath = Some(value.raw),
-                "cdtitle" => step.cdtitle = Some(value.raw),
-                "music" => step.music = Some(value.raw),
+                "version" => step.version = Some(value.raw.trim().to_string()),
+                "title" => step.title = Some(value.raw.trim().to_string()),
+                "titletranslit" => step.title_translit = Some(value.raw.trim().to_string()),
+                "subtitle" => step.subtitle = Some(value.raw.trim().to_string()),
+                "subtitletranslit" => step.subtitle_translit = Some(value.raw.trim().to_string()),
+                "artist" => step.artist = Some(value.raw.trim().to_string()),
+                "artisttranslist" => step.artist_translit = Some(value.raw.trim().to_string()),
+                "genre" => step.genre = Some(value.raw.trim().to_string()),
+                "credit" => step.credit = Some(value.raw.trim().to_string()),
+                "banner" => step.banner = Some(value.raw.trim().to_string()),
+                "background" => step.background = Some(value.raw.trim().to_string()),
+                "lyricspath" => step.lyrics_path = Some(value.raw.trim().to_string()),
+                "cdtitle" => step.cd_title = Some(value.raw.trim().to_string()),
+                "music" => step.music = Some(value.raw.trim().to_string()),
+                "origin" => step.origin = Some(value.raw.trim().to_string()),
+                "jacket" => step.jacket = Some(value.raw.trim().to_string()),
+                "cdimage" => step.cd_image = Some(value.raw.trim().to_string()),
+                "diskimage" => step.disk_image = Some(value.raw.trim().to_string()),
+                "preview" => step.preview = Some(value.raw.trim().to_string()),
+
+                // Simple inline match
+                "selectable" => {
+                    match value.raw.to_lowercase().trim() {
+                        "yes"
+                        // backwards compatibility
+                        | "roulette" | "es" | "omes" | "1" => {
+
+                        }
+                        _ => step.selectable = false,
+                    }
+                }
 
                 // Number values
                 "samplestart" => step.sample_start = self.parse_to_number(value, PRECISION_TIME),
@@ -1212,6 +1541,7 @@ impl StepmaniaParser {
                 "displaybpm" => {
                     step.display_bpm = self.parse_to_number_range(value, PRECISION_TIME)
                 }
+                "lastsecondhint" => step.last_second_hint = self.parse_to_number(value, PRECISION_TIME),
 
                 // visual changes
                 "bgchanges" => {
@@ -1321,6 +1651,11 @@ impl StepmaniaParser {
                     })
                 }
 
+                // Notes
+                "notes" => {
+                    step.notes = self.parse_to_chart(value);
+                }
+
                 // Unhandled keys are not recognised, and should be marked as correct warning/error
                 _ => {
                     //     self.errors.push(ParseError {
@@ -1334,5 +1669,103 @@ impl StepmaniaParser {
         }
 
         Ok(step)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_should_parse_title() {
+        let mut parser = StepmaniaParser::new();
+        let data = "
+#TITLE:ゾンビー・サーカス;
+";
+        let res = parser.parse_from_string(&data.to_string());
+        assert!(res.is_ok());
+        assert_eq!(parser.errors.len(), 0);
+
+        let chart = res.unwrap();
+        assert!(chart.title.is_some());
+        assert_eq!(chart.title.unwrap(), "ゾンビー・サーカス");
+    }
+
+    #[test]
+    fn it_should_parse_title_translit() {
+        let mut parser = StepmaniaParser::new();
+        let data = "
+#TITLETRANSLIT:  hello world! ;
+";
+        let res = parser.parse_from_string(&data.to_string());
+        assert!(res.is_ok());
+        assert_eq!(parser.errors.len(), 0);
+
+        let chart = res.unwrap();
+        assert!(chart.title_translit.is_some());
+        assert_eq!(chart.title_translit.unwrap(), "hello world!");
+    }
+
+    #[test]
+    fn it_should_parse_sample() {
+        let mut parser = StepmaniaParser::new();
+        let data = "
+#SAMPLESTART:1.333  ;
+#SAMPLELENGTH: 83;
+";
+        let res = parser.parse_from_string(&data.to_string());
+        assert!(res.is_ok());
+        assert_eq!(parser.errors.len(), 0);
+
+        let chart = res.unwrap();
+        assert!(chart.sample_start.is_some());
+        assert!(chart.sample_length.is_some());
+        assert_eq!(chart.sample_start.unwrap(), 1333);
+        assert_eq!(chart.sample_length.unwrap(), 83000);
+    }
+
+    #[test]
+    fn it_should_parse_display_bpm() {
+        let mut parser = StepmaniaParser::new();
+        let data = "
+#DISPLAYBPM:66.6668423 -240;
+";
+        let res = parser.parse_from_string(&data.to_string());
+        assert!(res.is_ok());
+        assert_eq!(parser.errors.len(), 0);
+
+        let chart = res.unwrap();
+        assert!(chart.display_bpm.is_some());
+        let bpm = chart.display_bpm.unwrap();
+        assert_eq!(bpm.min, 66666);
+        assert_eq!(bpm.max, 240000);
+    }
+
+    #[test]
+    fn it_should_parse_instrument_tracks() {
+        let mut parser = StepmaniaParser::new();
+        let data = "
+#INSTRUMENTTRACKS:guitar=guiatarrr.ogg,
+    drums= drums.mp3, vocal =yer.mp3;
+";
+        let res = parser.parse_from_string(&data.to_string());
+        assert!(res.is_ok());
+        assert_eq!(parser.errors.len(), 0);
+
+        let chart = res.unwrap();
+        assert_eq!(chart.instrument_tracks.len(), 3);
+
+        let guitar = chart.instrument_tracks.get(0).unwrap();
+        let drums = chart.instrument_tracks.get(1).unwrap();
+        let vocals = chart.instrument_tracks.get(2).unwrap();
+
+        assert_eq!(guitar.instrument, "guitar");
+        assert_eq!(guitar.file, "guiatarrr.ogg");
+
+        assert_eq!(drums.instrument, "drums");
+        assert_eq!(drums.file, "drums.mp3");
+
+        assert_eq!(vocals.instrument, "vocal");
+        assert_eq!(vocals.file, "yer.mp3");
     }
 }
